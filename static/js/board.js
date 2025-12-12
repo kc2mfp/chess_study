@@ -7,7 +7,10 @@
 
   // new elements for PGN input
   const pgnInput = document.getElementById('pgnInput');
-  const loadPgnBtn = document.getElementById('loadPgnBtn');
+  const checkPgnBtn = document.getElementById('checkPgnBtn');
+  const savePgnBtn = document.getElementById('savePgnBtn');
+  const randomPgnBtn = document.getElementById('randomPgnBtn');
+  const solutionInput = document.getElementById('solutionInput');
 
   // chess.js game state
   const game = new Chess();
@@ -236,81 +239,60 @@
     return cleaned;
   }
 
-  // Load PGN / Set position button handler
-  if (loadPgnBtn) {
-    loadPgnBtn.addEventListener('click', () => {
+  // Check PGN button uses the same logic as previous loader to set the board
+  if (checkPgnBtn) {
+    checkPgnBtn.addEventListener('click', () => {
+      // reuse the existing click handler logic by calling an internal function
+      handleLoadPgn();
+    });
+  }
+
+  // Save PGN: POST to server to persist in puzzels/ directory
+  if (savePgnBtn) {
+    savePgnBtn.addEventListener('click', async () => {
       const pgnText = pgnInput ? pgnInput.value : '';
-
-      // First: try to extract and play the move list from the PGN
-      const moves = extractMovesFromPGN(pgnText);
-      if (moves && moves.length > 0) {
-        game.reset();
-        let failed = false;
-        for (const san of moves) {
-          // try several ways to apply the SAN move
-          let mv = null;
-          try {
-            // try passing the SAN string directly
-            mv = game.move(san);
-          } catch (e) {
-            mv = null;
-          }
-          if (mv === null && typeof game.move === 'function') {
-            try {
-              mv = game.move({ san: san });
-            } catch (e) {
-              mv = null;
-            }
-          }
-          if (mv === null) {
-            // failed to apply this SAN — abort and fall back to FEN approach below
-            failed = true;
-            break;
-          }
-        }
-        if (!failed) {
-          clearHighlights();
-          renderPieces();
-          return;
-        }
-        // if failed, fall through to try CurrentPosition FEN
-      }
-
-      // Fallback: try to extract a FEN from [CurrentPosition] tag or a FEN-like line
-      const fen = extractFENFromPGN(pgnText);
-      if (!fen) {
-        alert('No moves or [CurrentPosition] FEN found in PGN text.');
+      const solutionText = solutionInput ? solutionInput.value : '';
+      if (!pgnText || pgnText.trim().length === 0) {
+        alert('Cannot save empty PGN.');
         return;
       }
 
-      // Try to load FEN into chess.js. It expects standard FEN string
-      const ok = game.load(fen);
-      if (!ok) {
-        // maybe the extracted value omitted trailing fields — try to append defaults for missing parts
-        const parts = fen.split(/\s+/);
-        if (parts.length === 1) {
-          // only piece placement present — append default: w - - 0 1
-          const withDefaults = fen + ' w - - 0 1';
-          if (!game.load(withDefaults)) {
-            alert('Failed to load FEN from PGN.');
-            return;
-          }
-        } else if (parts.length === 2) {
-          // piece + side
-          const withDefaults = fen + ' - - 0 1';
-          if (!game.load(withDefaults)) { alert('Failed to load FEN from PGN.'); return; }
-        } else if (parts.length === 4) {
-          // missing halfmove/fullmove
-          const withDefaults = fen + ' 0 1';
-          if (!game.load(withDefaults)) { alert('Failed to load FEN from PGN.'); return; }
-        } else {
-          alert('Failed to load FEN from PGN.');
+      try {
+        const resp = await fetch('/save_puzzle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pgn: pgnText, solution: solutionText })
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          alert('Save failed: ' + text);
           return;
         }
+        const data = await resp.json();
+        alert('Saved puzzle as: ' + data.filename);
+      } catch (err) {
+        alert('Save request failed: ' + err.message);
       }
+    });
+  }
 
-      clearHighlights();
-      renderPieces();
+  // Random puzzle fetch
+  if (randomPgnBtn) {
+    randomPgnBtn.addEventListener('click', async () => {
+      try {
+        const resp = await fetch('/random_puzzle');
+        if (!resp.ok) { alert('Failed to fetch random puzzle'); return; }
+        const data = await resp.json();
+        if (data && data.pgn) {
+          if (pgnInput) pgnInput.value = data.pgn;
+          if (solutionInput) solutionInput.value = data.solution || '';
+          handleLoadPgn();
+        } else {
+          alert('No puzzle received');
+        }
+      } catch (err) {
+        alert('Request failed: ' + err.message);
+      }
     });
   }
 
@@ -320,6 +302,50 @@
     clearHighlights();
     renderPieces();
   });
+
+  // Extracted loader function so Check button can reuse it
+  function handleLoadPgn() {
+    const pgnText = pgnInput ? pgnInput.value : '';
+
+    // First: try to extract and play the move list from the PGN
+    const moves = extractMovesFromPGN(pgnText);
+    if (moves && moves.length > 0) {
+      game.reset();
+      let failed = false;
+      for (const san of moves) {
+        let mv = null;
+        try { mv = game.move(san); } catch (e) { mv = null; }
+        if (mv === null && typeof game.move === 'function') {
+          try { mv = game.move({ san: san }); } catch (e) { mv = null; }
+        }
+        if (mv === null) { failed = true; break; }
+      }
+      if (!failed) { clearHighlights(); renderPieces(); return; }
+      // if failed, fall through to try CurrentPosition FEN
+    }
+
+    // Fallback: try to extract a FEN from [CurrentPosition] tag or a FEN-like line
+    const fen = extractFENFromPGN(pgnText);
+    if (!fen) { alert('No moves or [CurrentPosition] FEN found in PGN text.'); return; }
+
+    const ok = game.load(fen);
+    if (!ok) {
+      const parts = fen.split(/\s+/);
+      if (parts.length === 1) {
+        const withDefaults = fen + ' w - - 0 1';
+        if (!game.load(withDefaults)) { alert('Failed to load FEN from PGN.'); return; }
+      } else if (parts.length === 2) {
+        const withDefaults = fen + ' - - 0 1';
+        if (!game.load(withDefaults)) { alert('Failed to load FEN from PGN.'); return; }
+      } else if (parts.length === 4) {
+        const withDefaults = fen + ' 0 1';
+        if (!game.load(withDefaults)) { alert('Failed to load FEN from PGN.'); return; }
+      } else { alert('Failed to load FEN from PGN.'); return; }
+    }
+
+    clearHighlights();
+    renderPieces();
+  }
 
   // init
   createBoardGrid();
