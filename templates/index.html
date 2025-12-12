@@ -13,6 +13,46 @@
     <div id="controls">
       <button id="resetBtn">Reset Board</button>
       <p id="status"></p>
+
+      <!-- PGN input area -->
+      <label for="pgnInput">Paste PGN here (contains [CurrentPosition] tag):</label>
+      <textarea id="pgnInput" rows="12" cols="70">[Event "Let's Play!"]
+[Site "Chess.com"]
+[Date "2025.12.01"]
+[Round "-"]
+[White "Shashank_Yekbote"]
+[Black "kc2mfp"]
+[Result "0-1"]
+[CurrentPosition "r4r1k/ppN3pp/2bnQ3/4p3/3b4/6PP/P5qK/3R1R2 w - - 0 22"]
+[Timezone "UTC"]
+[ECO "A22"]
+[ECOUrl "https://www.chess.com/openings/English-Opening-Carls-Bremen-Reversed-Dragon-Variation-4.cxd5-Nxd5-5.Bg2-Be6"]
+[UTCDate "2025.12.01"]
+[UTCTime "15:18:56"]
+[WhiteElo "819"]
+[BlackElo "990"]
+[TimeControl "1/86400"]
+[Termination "kc2mfp won by checkmate"]
+[StartTime "15:18:56"]
+[EndDate "2025.12.10"]
+[EndTime "15:32:24"]
+[Link "https://www.chess.com/analysis/game/daily/896861665/analysis?move=9"]
+[WhiteUrl "https://images.chesscomfiles.com/uploads/v1/user/455873918.f48ec8c7.50x50o.14b7d39172a5.jpg"]
+[WhiteCountry "69"]
+[WhiteTitle ""]
+[BlackUrl "https://images.chesscomfiles.com/uploads/v1/user/105188194.2ff19563.50x50o.1a1e58269dcd.jpeg"]
+[BlackCountry "2"]
+[BlackTitle ""]
+
+1. c4 e5 2. Nc3 Nf6 3. g3 d5 4. cxd5 Nxd5 5. Bg2 Be6 6. Nxd5 Bxd5 7. e4 Bc6 8.
+d3 Bc5 9. Ne2 Nd7 10. O-O O-O 11. h3 f5 $4 12. Kh2 $9 fxe4 13. dxe4 Bxf2 14. Qb3+
+Kh8 15. Bd2 $6 Nc5 16. Qc4 $2 Qxd2 $1 17. Rad1 Qxb2 18. Nc3 Bd4 19. Nd5 Nxe4 20.
+Nxc7 $6 Nd6 $6 21. Qe6 $2 Qxg2# $1 0-1</textarea>
+      <div>
+        <button id="loadPgnBtn">Load PGN / Set Position</button>
+      </div>
+      <!-- end PGN input area -->
+
     </div>
   </div>
 

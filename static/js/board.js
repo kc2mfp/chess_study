@@ -5,6 +5,10 @@
   const statusEl = document.getElementById('status');
   const resetBtn = document.getElementById('resetBtn');
 
+  // new elements for PGN input
+  const pgnInput = document.getElementById('pgnInput');
+  const loadPgnBtn = document.getElementById('loadPgnBtn');
+
   // chess.js game state
   const game = new Chess();
 
@@ -181,6 +185,133 @@
     const orig = el.style.outline;
     el.style.outline = '3px solid rgba(200,20,20,0.9)';
     setTimeout(() => el.style.outline = orig, 300);
+  }
+
+  // parse PGN text and attempt to find a [CurrentPosition "FEN"] tag
+  function extractFENFromPGN(pgnText) {
+    if (!pgnText) return null;
+    // simple regex to capture CurrentPosition tag value or FEN-like tag
+    const reTag = /\[CurrentPosition\s+"([^"]+)"\]/i;
+    const m = pgnText.match(reTag);
+    if (m && m[1]) return m[1].trim();
+
+    // fallback: try to find a FEN line directly (6 space-separated fields)
+    const fenLike = pgnText.split(/\r?\n/).map(l => l.trim()).find(l => {
+      // a FEN contains slashes and spaces and has 6 space-separated parts
+      return l.indexOf('/') !== -1 && l.split(/\s+/).length >= 6;
+    });
+    if (fenLike) return fenLike;
+    return null;
+  }
+
+  // parse moves section from PGN text (remove tags/comments/NAGs and return SAN move tokens)
+  function extractMovesFromPGN(pgnText) {
+    if (!pgnText) return [];
+    // remove tag pairs [ ... ]
+    let body = pgnText.replace(/\[.*?\]\r?\n?/gs, ' ');
+    // remove brace comments { ... }
+    body = body.replace(/\{[^}]*\}/g, ' ');
+    // remove parenthesis variations (e.g. alternate lines)
+    body = body.replace(/\([^)]*\)/g, ' ');
+    // remove NAGs like $4
+    body = body.replace(/\$\d+/g, ' ');
+    // remove move numbers like 1. or 1... (numbers followed by dots)
+    body = body.replace(/\d+\.{1,3}/g, ' ');
+    // remove results and stray asterisks
+    body = body.replace(/1-0|0-1|1\/2-1\/2|\*/g, ' ');
+    // collapse whitespace
+    const tokens = body.split(/[\s\n\r]+/).map(t => t.trim()).filter(Boolean);
+
+    const cleaned = [];
+    tokens.forEach(tok => {
+      // strip trailing annotation chars like + # ! ? =
+      let t = tok.replace(/[!?+#=]+$/g, '');
+      // ignore purely numeric tokens or tokens that look like move remnants (eg "..." or ".")
+      if (/^\d+$/.test(t)) return;
+      // ignore tokens that are unlikely moves (contain '=' only or weird chars)
+      if (!/[a-zA-Z0-9O]/.test(t)) return;
+      cleaned.push(t);
+    });
+
+    return cleaned;
+  }
+
+  // Load PGN / Set position button handler
+  if (loadPgnBtn) {
+    loadPgnBtn.addEventListener('click', () => {
+      const pgnText = pgnInput ? pgnInput.value : '';
+
+      // First: try to extract and play the move list from the PGN
+      const moves = extractMovesFromPGN(pgnText);
+      if (moves && moves.length > 0) {
+        game.reset();
+        let failed = false;
+        for (const san of moves) {
+          // try several ways to apply the SAN move
+          let mv = null;
+          try {
+            // try passing the SAN string directly
+            mv = game.move(san);
+          } catch (e) {
+            mv = null;
+          }
+          if (mv === null && typeof game.move === 'function') {
+            try {
+              mv = game.move({ san: san });
+            } catch (e) {
+              mv = null;
+            }
+          }
+          if (mv === null) {
+            // failed to apply this SAN — abort and fall back to FEN approach below
+            failed = true;
+            break;
+          }
+        }
+        if (!failed) {
+          clearHighlights();
+          renderPieces();
+          return;
+        }
+        // if failed, fall through to try CurrentPosition FEN
+      }
+
+      // Fallback: try to extract a FEN from [CurrentPosition] tag or a FEN-like line
+      const fen = extractFENFromPGN(pgnText);
+      if (!fen) {
+        alert('No moves or [CurrentPosition] FEN found in PGN text.');
+        return;
+      }
+
+      // Try to load FEN into chess.js. It expects standard FEN string
+      const ok = game.load(fen);
+      if (!ok) {
+        // maybe the extracted value omitted trailing fields — try to append defaults for missing parts
+        const parts = fen.split(/\s+/);
+        if (parts.length === 1) {
+          // only piece placement present — append default: w - - 0 1
+          const withDefaults = fen + ' w - - 0 1';
+          if (!game.load(withDefaults)) {
+            alert('Failed to load FEN from PGN.');
+            return;
+          }
+        } else if (parts.length === 2) {
+          // piece + side
+          const withDefaults = fen + ' - - 0 1';
+          if (!game.load(withDefaults)) { alert('Failed to load FEN from PGN.'); return; }
+        } else if (parts.length === 4) {
+          // missing halfmove/fullmove
+          const withDefaults = fen + ' 0 1';
+          if (!game.load(withDefaults)) { alert('Failed to load FEN from PGN.'); return; }
+        } else {
+          alert('Failed to load FEN from PGN.');
+          return;
+        }
+      }
+
+      clearHighlights();
+      renderPieces();
+    });
   }
 
   // reset control
